@@ -75,3 +75,4 @@ class PositionalEncoding(nn.Module):
     def forward(self, x):
         # slice the seq_len out, keep others the same
         x = x + self.pe[:, :x.shape[1], :].required_grad(False)
+        return self.dropout(x)
