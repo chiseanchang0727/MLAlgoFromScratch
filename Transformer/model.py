@@ -6,7 +6,7 @@ class InputEmbeddings(nn.Module):
 
     def __init__(self, d_model: int, vocab_size: int):
         """
-        d_model: the dimension of vector
+        d_model: the dimension of embedding vector
         vocab_size: how many words in the vocabulary
         """
         super.__init__()
@@ -94,3 +94,28 @@ class LayerNormalization(nn.Module):
         std = x.std(dim=-1, keepdim=True)
         
         return self.alpha * mean / (std + self.eps) + self.beta
+    
+    
+    
+class MultiHeadAttetionBlock(nn.Module):
+    
+    def __init__(self, d_model: int, h: int, dropout: int) -> None:
+        """
+        d_model: the size of embedding vector
+        h: the number of head
+        """
+        super().__init__()
+        self.d_model = d_model
+        
+        """
+        Note that the QKV matrix is splitted along with the embedding dimension not the seq dimension,
+        which means each head have access to full sentence but different part of the sequence.
+        """
+        self.h = h
+        assert d_model % h == 0, "d_model is not dividable by h"
+        self.d_k = d_model // h
+        
+        self.w_q = nn.Linear(d_model, d_model) # Wq
+        self.w_k = nn.Linear(d_model, d_model) # Wk
+        self.w_v = nn.Linear(d_model, d_model) # Wv
+        
