@@ -76,3 +76,21 @@ class PositionalEncoding(nn.Module):
         # slice the seq_len out, keep others the same
         x = x + self.pe[:, :x.shape[1], :].required_grad(False)
         return self.dropout(x)
+    
+class LayerNormalization(nn.Module):
+    
+    def __init__(self, eps: float = 1e-6) -> None:
+        super().__init__()
+        
+        # eps: Epsilon is for increasing the numerical stability(don't want too big/small) and avoid 0 in dominator
+        self.eps = eps
+        self.alpha = nn.Parameter(torch.ones(1)) # Multiplied
+        self.beta = nn.Parameter(torch.zeros(1)) # Added
+        
+    def forward(self, x):
+        # dim=-1: means aggregate the value along with embeddings, i.e. d_model
+        # use keepdim=True to maintain the original shape to avoid dimension mismatch
+        mean = x.mean(dim=-1, keepdim=True) 
+        std = x.std(dim=-1, keepdim=True)
+        
+        return self.alpha * mean / (std + self.eps) + self.beta
