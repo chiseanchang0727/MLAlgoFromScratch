@@ -95,7 +95,18 @@ class LayerNormalization(nn.Module):
         
         return self.alpha * mean / (std + self.eps) + self.beta
     
-    
+
+class FeedForwardBlock(nn.Module):
+
+    def __init__(self, d_model: int, d_ff: int, dropout: float) -> None:
+        super().__init__()
+        self.linear_1 = nn.Linear(d_model, d_ff)
+        self.linear_2 = nn.Linear(d_ff, d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        # (Batch, seq_len, d_model) -> (Batch, seq_len, d_ff) -> (Batch, seq_len, d_model)
+        return self.linear_2(self.dropout(torch.relu(self.linear_1(x))))
     
 class MultiHeadAttetionBlock(nn.Module):
     
@@ -133,6 +144,8 @@ class MultiHeadAttetionBlock(nn.Module):
         # For hiding some interaction between words
         if mask is not None:
             attention_score.masked_fill(mask==0, -1e10)
+        
+        # Apply the softmask to the last dimension
         attention_score = attention_score.softmask(dim = -1) # (Batch, h, seq_len, seq_len)
 
         if dropout is not None:
@@ -160,4 +173,94 @@ class MultiHeadAttetionBlock(nn.Module):
         # -1: PyTorch calculates this dimension automatically to ensure the total number of elements remains consistent. i.e. let pytorch figure out this dimension
         x = x.transpose(1, 2).contiguous().view(x.shape[0], -1, self.h * self.d_k)
 
-        return 
+        # (Batch, seq_len, d_model) -> (Batch, seq_len, d_model)
+        return self.w_o(x)
+    
+class ResidualConnection(nn.Module):
+    """
+    This is the code for "Add & Norm" layer
+    """
+
+    def __init__(self, dropout: float) -> None:
+        super().__init__()
+        self.dropout = nn.Dropout(dropout)
+        self.norm = LayerNormalization()
+
+
+    def forward(self, x, sublayer):
+        """
+        sublayer: previous layer
+
+        In the "attention is all you need", it should be self.norm(x + self.dropout(sublayer(x)))
+        Pros: More stable training.
+        Cons: Gradient flow may be challenging in deep layers (because normalization happens last, which can cause gradient shrinkage).
+
+        but the paper (https://arxiv.org/pdf/2002.04745) suggest a way called Pre-Norm Residual Connection 
+        Pros:
+        Improves gradient flow, helping deeper transformers train more effectively.
+        Reduces instability during training, especially when using deeper models.
+        Cons:
+        The model may be less robust to certain hyperparameter choices.
+        Requires careful tuning of learning rates.
+
+        Conclusion:
+        Gradient Flow Issues in Deep Transformers:
+
+            Post-Norm (original) can lead to vanishing gradients in deep transformers.
+            Pre-Norm improves gradient propagation, making deep models more stable.
+        Empirical Results:
+
+        Studies (including Xiong et al., 2020) show that Pre-Norm transformers train faster and more stably than Post-Norm transformers, 
+        especially for very deep networks (e.g., GPT-like architectures).
+        """
+
+        return x + self.dropout(sublayer(self.norm(x)))
+
+
+class EncoderBlock(nn.Module):
+
+    def __init__(self, self_attention_block: MultiHeadAttetionBlock, feed_forward_block: FeedForwardBlock, dropout: float):
+        super().__init__()
+        self.self_attention_block = self_attention_block # It only focus on the input sentence itslef, so called self-attention
+        self.feed_forward_block = feed_forward_block
+        self.residual_connection = nn.ModuleList([ResidualConnection(dropout) for _ in range(2)]) # two residual connection in the encoder
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, src_mask):
+        x = self.residual_connection[0](x, lambda x : self.self_attention_block(x, x, x, src_mask))
+        x = self.residual_connection[1](x, self.feed_forward_block(x))
+        return x
+    
+
+class Encoder(nn.Module):
+
+    def __init__(self, layers: nn.ModuleList) -> None:
+        super().__init__()
+        self.layers = layers
+        self.norm = LayerNormalization()
+
+    def forward(self, x, mask):
+        for layer in self.layers:
+            x = layer(x, mask)
+        return self.norm(x)
+    
+
+class DecoderBlock(nn.Module):
+    """
+    For cross attention part, the key is from decoder while query and key are form encoder
+    """
+
+    def __init__(self, 
+                 self_attention_block: MultiHeadAttetionBlock, 
+                 cross_attention_block: MultiHeadAttetionBlock,
+                 feed_forward_block: FeedForwardBlock,
+                 dropout: float) -> None:
+        super().__init__()
+        self.self_attention_block = self_attention_block
+        self.cross_attention_block = cross_attention_block
+        self.feed_forward_block = feed_forward_block
+        self.residual_connection = nn.ModuleList([ResidualConnection(dropout) for _ in range(3)])
+
+    def forward(self, x, encoder_output, src_mask, target_mask):
+
+        return
