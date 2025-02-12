@@ -127,6 +127,7 @@ class MultiHeadAttetionBlock(nn.Module):
         d_k = query.shape[-1]
 
         # For applying the multiplication of query and the last two element in key, transpose the last two elements in key
+        # (Batch, h, seq_len, d_k) -> (Batch, seq_len, seq_len)
         attention_score = (query @ key.transpose(-2 ,-1)) / math.sqrt(d_k)
 
         # For hiding some interaction between words
@@ -147,7 +148,7 @@ class MultiHeadAttetionBlock(nn.Module):
         key = self.w_k(k) # (Batch, seq_len, d_moel) -> (Batch, seq_len, d_moel) 
         value = self.w_v(v) # (Batch, seq_len, d_moel) -> (Batch, seq_len, d_moel) 
 
-        # (Batch, seq_len, d_model) -> (Batch, seq_len, h, d_model) -> (Batch, h, seq_len, d_model)
+        # (Batch, seq_len, d_model) -> (Batch, seq_len, h, d_k) -> (Batch, h, seq_len, d_k)
         # Which means, each head will watch the full sentence but a smaller part of embedding
         query = query.view(query.shape[0], query.shape[1], self.h, self.d_k).transpose(1, 2)
         key = key.view(key.shape[0], key.shape[1], self.h, self.d_k).transpose(1, 2)
@@ -156,6 +157,7 @@ class MultiHeadAttetionBlock(nn.Module):
         x, self.attention_scores =MultiHeadAttetionBlock.attention(query, key, value, mask, self.dropout)
 
         # (Batch, h, seq_len, d_k) -> (Batch, seq_len, h, d_k) -> (Batch, seq_len, d_model)
-        x = x.transpose(1, 2)
+        # -1: PyTorch calculates this dimension automatically to ensure the total number of elements remains consistent. i.e. let pytorch figure out this dimension
+        x = x.transpose(1, 2).contiguous().view(x.shape[0], -1, self.h * self.d_k)
 
         return 
