@@ -189,7 +189,7 @@ class ResidualConnection(nn.Module):
 
     def forward(self, x, sublayer):
         """
-        sublayer: previous layer
+        sublayer: previous layer, a callable object
 
         In the "attention is all you need", it should be self.norm(x + self.dropout(sublayer(x)))
         Pros: More stable training.
@@ -261,6 +261,32 @@ class DecoderBlock(nn.Module):
         self.feed_forward_block = feed_forward_block
         self.residual_connection = nn.ModuleList([ResidualConnection(dropout) for _ in range(3)])
 
-    def forward(self, x, encoder_output, src_mask, target_mask):
+    def forward(self, x, encoder_output, src_mask, tgt_mask):
+        x = self.residual_connection[0](x, lambda x: self.self_attention_block(x, x, x, tgt_mask))
+        x = self.residual_connection[1](x, lambda x: self.cross_attention_block(x, encoder_output, encoder_output, src_mask))
+        x = self.residual_connection[2](x, self.feed_forward_block(x))
+        return x
+    
+class Decoder(nn.Module):
+    
+    def __init__(self, layers: nn.ModuleList) -> None:
+        super().__init__()
+        self.layers = layers
+        self.norm = LayerNormalization()
 
-        return
+    def forward(self, x, encoder_output, src_mask, tgt_mask):
+        for layer in self.layers:
+            x = layer(x, encoder_output, src_mask, tgt_mask)
+        return self.norm(x)
+    
+class ProjectionLayer:
+    """
+    Project the embedding into vocabulary
+    """
+    def __init__(self, d_model: int, vocab_size: int) -> None:
+        super.__init__()
+        self.proj = nn.Linear(d_model, vocab_size)
+        
+    def forward(self, x):
+        # (Batch, seq_len, d_moel) ->  (Batch, seq_len, vocab_size)
+        return torch.log_softmax(self.proj(x), dim=-1) # Use log_softmax to numerical stability
