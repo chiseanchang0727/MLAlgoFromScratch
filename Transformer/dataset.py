@@ -54,3 +54,46 @@ class BilingualDataset(Dataset):
                 torch.tensor([self.pad_token] * encoded_num_padding_tokens, dtype=torch.int64)
             ]
         )
+        
+        decoded_input = torch.cat(
+            [
+                self.sos_token,
+                torch.tesnor(encoded_input_tokens, dtype=torch.int64),
+                torch.tensor([self.pad_token] * decoded_num_padding_tokens, dtype=torch.int64)
+            ]
+        )
+        
+        # label means the corresonding result(in this demo, it would be the translation)
+        # The <SOS> token is not included in label because the model is trained to predict the next token, not the start token.
+        # The <EOS> token is included in label so that the model learns when to stop generation.
+        label = torch.cat(
+            [
+                torch.tensor(decoded_input_tokens, dtype=torch.int64),
+                self.eos_token,
+                torch.tensor([self.pad_token] * decoded_num_padding_tokens, dtype=torch.int64)
+            ]
+        )
+        
+        assert encoded_input.size(0) == self.seq_len
+        assert decoded_input.size(0) == self.seq_len
+        assert label.size(0) == self.seq_len
+        
+        
+        return {
+            "encoder_input": encoded_input, # (seq_len)
+            "decoder_input": decoded_input, # (seq_len)
+            # encoer mask: we don't want the padding token to participate the self-attention 
+            "encoder_mask": (encoded_input != self.pad_token).unsqueeze(0).unsqueeze(0).int(), # (1, 1, seq_len), because it will be used in the self-attention mechanism
+            
+            # causal_mask: no padding token and afterward token(means the future)
+            "decoder_mask": (decoded_input != self.pad_token).unsqueeze(0).unsqueeze(0).int() & causal_mask(decoded_input.size(0)), # (1, seq_len, seq_len)
+             
+            "label": label, # (seq_len)
+            "src_text": src_text,
+            "tgt_text": tgt_text
+        }
+        
+        
+def causal_mask(size):
+    mask = torch.triu(torch.ones(1, size, size), diagonal=1).type(torch.int)
+    return mask == 0 # reverse the result, 0 is what we want, 1 is not what we want
