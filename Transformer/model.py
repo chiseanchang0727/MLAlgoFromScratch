@@ -9,7 +9,7 @@ class InputEmbeddings(nn.Module):
         d_model: the dimension of embedding vector
         vocab_size: how many words in the vocabulary
         """
-        super.__init__()
+        super().__init__()
         self.d_model = d_model
         self.vocab_size = vocab_size
         self.embedding = nn.Embedding(num_embeddings=vocab_size, embedding_dim=d_model)
@@ -54,7 +54,7 @@ class PositionalEncoding(nn.Module):
             torch.pow() has to deal with negative bases, fractional exponents, special case
 
         """
-        div_term = torch.exp(torch.arange(0, d_model).float() * (math.log(10000.0) / d_model))
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (math.log(10000.0) / d_model))
 
         # Apply the sin to even positions
         pe[:, 0::2] = torch.sin(position / div_term)
@@ -74,7 +74,7 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         # slice the seq_len out, keep others the same
-        x = x + self.pe[:, :x.shape[1], :].required_grad(False)
+        x = x + self.pe[:, :x.shape[1], :].requires_grad_(False)
         return self.dropout(x)
     
 class LayerNormalization(nn.Module):
@@ -284,7 +284,7 @@ class ProjectionLayer:
     Project the embedding into vocabulary
     """
     def __init__(self, d_model: int, vocab_size: int) -> None:
-        super.__init__()
+        super().__init__()
         self.proj = nn.Linear(d_model, vocab_size)
         
     def forward(self, x):

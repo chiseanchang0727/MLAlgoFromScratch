@@ -10,7 +10,7 @@ from pathlib import Path
 from dataset import BilingualDataset, causal_mask
 from model import build_transformer
 from config import get_conifg, get_weight_file_path
-from torch.utils.tensorboard import SummaryWriter 
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 def get_all_sentences(dataset, language):
@@ -36,7 +36,7 @@ def get_or_build_tokenizer(config, dataset, language):
         If a word appears less than 2 times (i.e., it appears only once), 
         it will not be added to the vocabulary and will be treated as an unknown token (UNK or another special token specified).
         """
-        trainer = WordLevelTrainer(special_token=['UNK', '[PAD]', '[SOS]', '[EOS]'], min_frequency=2)
+        trainer = WordLevelTrainer(special_tokens=['[UNK]', '[PAD]', '[SOS]', '[EOS]'], min_frequency=2)
         
         tokenizer.train_from_iterator(get_all_sentences(dataset, language), trainer=trainer)
         
@@ -49,7 +49,7 @@ def get_or_build_tokenizer(config, dataset, language):
 
 def get_dataset(config):
     # load 'train' part of the dataset
-    ds_raw = load_dataset('opus_books', f'{config["lang_src"]}-{config['lang_tgt']}', split='train')
+    ds_raw = load_dataset('opus_books', f'{config["lang_src"]}-{config["lang_tgt"]}', split='train')
     
     tokenizer_src = get_or_build_tokenizer(config, ds_raw, config['lang_src'])
     tokenizer_tgt = get_or_build_tokenizer(config, ds_raw, config['lang_tgt'])
@@ -103,8 +103,8 @@ def train_model(config):
     
     optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'], eps=1e-9) # eps: Epsilon
     
-    initial_lenght = 0
-    global_stop = 0
+    initial_epoch = 0
+    global_step = 0
     if config['preload']:
         model_filename = get_weight_file_path(config, epoch=config['preload'])
         print(f'Preload the model {model_filename}')
@@ -121,7 +121,7 @@ def train_model(config):
     """
     loss_fn = nn.CrossEntropyLoss(ignore_index=tokenizer_src.token_to_id('[PAD]'), label_smoothing=0.1)
     
-    for epoch in range(initial_epoch, config['epoch']):
+    for epoch in range(initial_epoch, config['num_epoch']):
         model.train()
         
         # tqdm(train_dataloader) is essentially the same as train_dataloader, but it wraps the dataloader with a progress bar for visualization.
@@ -144,4 +144,51 @@ def train_model(config):
             # (batch_size, seq_len, tgt_vocab_size) -> (batch_size * seq_len, tgt_vocab_size)
             loss = loss_fn(project_output.view(-1, tokenizer_tgt.get_vocab_size()), label.view(-1)) # (batch_size * seq_len)
 
+            # .set_postfix(...) adds or updates a custom message at the end of the progress bar.
+            batch_iterator.set_postfix(f'loss: {loss.item():6.3f}')
+
+            # Log the loss
+            # add_scalar(...) records a single scalar metric (like loss) over time
+            writer.add_scalar('train loss', loss.item(), global_step)
+
+            # flush() forces writing everything to disk so that it appears in TensorBoard immediately instead of waiting.
+            writer.flush()
+
+            # Backpropagation
+            loss.backward()
+
+
+            """
+            Accumulates gradients over multiple iterations before updating the model. 
+            This simulates a larger batch size, which can improve model performance.
+            Code example:
+
+            accumulation_step = 4
+            for idx, batch in enumerate(dataloader):
+                loss = model(batch)          
+                loss = loss / accumulation_step  # ✅ Scale loss before backpropagation
+                loss.backward()  # Compute gradients (but do NOT update optimizer yet)
+
+                if (idx + 1) % accumulation_step == 0:  # ✅ Update every `accumulation_step` iterations
+                    optimizer.step()  # Apply accumulated gradients to update weights
+                    optimizer.zero_grad()  # Reset gradients
+            """
+            optimizer.step() #Updates model parameters using gradients
+            optimizer.zero_grad() # clear old gradients to avoid accumulation
+
+            global_step += 1
+
+        # Save the model
+        model_filename = get_weight_file_path(config, f'{epoch:02d}')
+
+        torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'global_step': global_step
+        }, model_filename)
+
+if __name__  == '__main__':
+    config = get_conifg()
+    train_model(config)
             

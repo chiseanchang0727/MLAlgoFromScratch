@@ -12,8 +12,9 @@ def get_conifg():
         "model_folder": "weights",
         "model_basename": "tmodel_",
         "preload": None, # restart training if it is crashed
-        "tokenizer_file": "tokenizer_{0}.json",
-        "experiment_name": "runs/tmodel"
+        "tokenizer_file": "./Transformer/tokenizer_{0}.json",
+        "experiment_name": "runs/tmodel",
+        "num_epoch": 10
     }
     
     

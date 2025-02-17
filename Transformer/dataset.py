@@ -16,9 +16,9 @@ class BilingualDataset(Dataset):
         self.seq_len = seq_len
         
         # save the particular tokens
-        self.sos_token  = torch.Tensor((tokenizer_src.token_to_id(['SOS'])), dtype=torch.int64)  # usually the vocab is longer than 32-bit, so we use int64
-        self.eos_token  = torch.Tensor((tokenizer_src.token_to_id(['EOS'])), dtype=torch.int64) 
-        self.pad_token  = torch.Tensor((tokenizer_src.token_to_id(['PAD'])), dtype=torch.int64) 
+        self.sos_token  = torch.tensor([tokenizer_src.token_to_id('[SOS]')], dtype=torch.int64)  # usually the vocab is longer than 32-bit, so we use int64
+        self.eos_token  = torch.tensor([tokenizer_src.token_to_id('[EOS]')], dtype=torch.int64) 
+        self.pad_token  = torch.tensor([tokenizer_src.token_to_id('[PAD]')], dtype=torch.int64) 
         
     def __len__(self):
         return len(self.ds)
@@ -58,7 +58,7 @@ class BilingualDataset(Dataset):
         decoded_input = torch.cat(
             [
                 self.sos_token,
-                torch.tesnor(encoded_input_tokens, dtype=torch.int64),
+                torch.tensor(decoded_input_tokens, dtype=torch.int64),
                 torch.tensor([self.pad_token] * decoded_num_padding_tokens, dtype=torch.int64)
             ]
         )
