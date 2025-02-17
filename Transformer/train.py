@@ -11,6 +11,7 @@ from dataset import BilingualDataset, causal_mask
 from model import build_transformer
 from config import get_conifg, get_weight_file_path
 from torch.utils.tensorboard import SummaryWriter 
+from tqdm import tqdm
 
 def get_all_sentences(dataset, language):
     for item in dataset:
@@ -123,3 +124,12 @@ def train_model(config):
     for epoch in range(initial_epoch, config['epoch']):
         model.train()
         
+        # tqdm(train_dataloader) is essentially the same as train_dataloader, but it wraps the dataloader with a progress bar for visualization.
+        batch_iterator = tqdm(train_dataloader, desc=f'Processing epoch {epoch:02d}')
+        
+        for batch in batch_iterator:
+                       
+            encoder_input = batch['encoder_input'].to(device)  # (batch_size, seq_len)
+            decoder_input = batch['decoder_input'].to(device)  # (batch_size, seq_len)
+            encoder_mask = batch['encoder_mask'].to(device)  # (batch_size, 1, 1, seq_len)
+            decoder_mask = batch['decoder_mask'].to(device)  # (batch_size, 1, seq_len, seq_len)

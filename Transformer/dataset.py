@@ -82,6 +82,7 @@ class BilingualDataset(Dataset):
         return {
             "encoder_input": encoded_input, # (seq_len)
             "decoder_input": decoded_input, # (seq_len)
+            
             # encoer mask: we don't want the padding token to participate the self-attention 
             "encoder_mask": (encoded_input != self.pad_token).unsqueeze(0).unsqueeze(0).int(), # (1, 1, seq_len), because it will be used in the self-attention mechanism
             
@@ -97,3 +98,4 @@ class BilingualDataset(Dataset):
 def causal_mask(size):
     mask = torch.triu(torch.ones(1, size, size), diagonal=1).type(torch.int)
     return mask == 0 # reverse the result, 0 is what we want, 1 is not what we want
+
