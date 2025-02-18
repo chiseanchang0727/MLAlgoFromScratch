@@ -139,19 +139,19 @@ class MultiHeadAttetionBlock(nn.Module):
 
         # For applying the multiplication of query and the last two element in key, transpose the last two elements in key
         # (Batch, h, seq_len, d_k) -> (Batch, seq_len, seq_len)
-        attention_score = (query @ key.transpose(-2 ,-1)) / math.sqrt(d_k)
+        attention_scores = (query @ key.transpose(-2 ,-1)) / math.sqrt(d_k)
 
         # For hiding some interaction between words
         if mask is not None:
-            attention_score.masked_fill(mask==0, -1e10)
+            attention_scores.masked_fill(mask==0, -1e10)
         
         # Apply the softmask to the last dimension
-        attention_score = attention_score.softmask(dim = -1) # (Batch, h, seq_len, seq_len)
+        attention_scores = torch.softmax(attention_scores, dim = -1)  # (Batch, h, seq_len, seq_len)
 
         if dropout is not None:
-            attention_score = dropout(attention_score)
+            attention_scores = dropout(attention_scores)
 
-        return (attention_score @ value), attention_score
+        return (attention_scores @ value), attention_scores
 
     def forward(self, q, k, v, mask):
         """
@@ -167,7 +167,7 @@ class MultiHeadAttetionBlock(nn.Module):
         key = key.view(key.shape[0], key.shape[1], self.h, self.d_k).transpose(1, 2)
         value = value.view(value.shape[0], value.shape[1], self.h, self.d_k).transpose(1, 2)
 
-        x, self.attention_scores =MultiHeadAttetionBlock.attention(query, key, value, mask, self.dropout)
+        x, self.attention_scores = MultiHeadAttetionBlock.attention(query, key, value, mask, self.dropout)
 
         # (Batch, h, seq_len, d_k) -> (Batch, seq_len, h, d_k) -> (Batch, seq_len, d_model)
         # -1: PyTorch calculates this dimension automatically to ensure the total number of elements remains consistent. i.e. let pytorch figure out this dimension
@@ -228,7 +228,7 @@ class EncoderBlock(nn.Module):
 
     def forward(self, x, src_mask):
         x = self.residual_connection[0](x, lambda x : self.self_attention_block(x, x, x, src_mask))
-        x = self.residual_connection[1](x, self.feed_forward_block(x))
+        x = self.residual_connection[1](x, self.feed_forward_block)
         return x
     
 
@@ -265,7 +265,7 @@ class DecoderBlock(nn.Module):
         x = self.residual_connection[0](x, lambda x: self.self_attention_block(x, x, x, tgt_mask))
         # Cross attention has the same structure with multi-head attention block, the "cross" means the input comes from different sequence
         x = self.residual_connection[1](x, lambda x: self.cross_attention_block(x, encoder_output, encoder_output, src_mask)) # (q, k, v, mask)
-        x = self.residual_connection[2](x, self.feed_forward_block(x))
+        x = self.residual_connection[2](x, self.feed_forward_block)
         return x
     
 class Decoder(nn.Module):
