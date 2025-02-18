@@ -280,7 +280,7 @@ class Decoder(nn.Module):
             x = layer(x, encoder_output, src_mask, tgt_mask)
         return self.norm(x)
     
-class ProjectionLayer:
+class ProjectionLayer(nn.Module):
     """
     Project the embedding into vocabulary
     """

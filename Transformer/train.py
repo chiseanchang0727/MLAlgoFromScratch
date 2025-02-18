@@ -145,7 +145,7 @@ def train_model(config):
             loss = loss_fn(project_output.view(-1, tokenizer_tgt.get_vocab_size()), label.view(-1)) # (batch_size * seq_len)
 
             # .set_postfix(...) adds or updates a custom message at the end of the progress bar.
-            batch_iterator.set_postfix(f'loss: {loss.item():6.3f}')
+            batch_iterator.set_postfix({"loss": f'loss: {loss.item():6.3f}'})
 
             # Log the loss
             # add_scalar(...) records a single scalar metric (like loss) over time
