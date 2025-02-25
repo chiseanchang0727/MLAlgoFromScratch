@@ -23,5 +23,8 @@ def get_weight_file_path(config, epoch: str):
     model_folder = config['model_folder']
     model_basename = config['model_basename']
     model_filename = f"{model_basename}/{epoch}.pt"
+    model_path = Path('.') / 'Transformer' / model_folder / model_basename / f"{epoch}.pt"
     
-    return str(Path('.') / model_folder / model_filename)
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    return str(model_path)
