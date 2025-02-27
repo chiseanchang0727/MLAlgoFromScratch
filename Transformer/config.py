@@ -3,7 +3,7 @@ from pathlib import Path
 def get_conifg():
     return {
         "batch_size": 8,
-        "num_epochs": 20,
+        "num_epoch": 30,
         "lr": 1e-4,
         "seq_len": 350, # author had checked, 350 is enough for Italian
         "d_model": 512,
@@ -14,7 +14,6 @@ def get_conifg():
         "preload": None, # restart training if it is crashed
         "tokenizer_file": "./Transformer/tokenizer_{0}.json",
         "experiment_name": "./Transformer/runs/tmodel",
-        "num_epoch": 10
     }
     
     

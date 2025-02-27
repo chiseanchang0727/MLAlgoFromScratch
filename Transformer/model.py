@@ -93,7 +93,7 @@ class LayerNormalization(nn.Module):
         mean = x.mean(dim=-1, keepdim=True) 
         std = x.std(dim=-1, keepdim=True)
         
-        return self.alpha * mean / (std + self.eps) + self.beta
+        return self.alpha * (x-mean) / (std + self.eps) + self.beta
     
 
 class FeedForwardBlock(nn.Module):
