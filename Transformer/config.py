@@ -4,7 +4,7 @@ def get_conifg():
     return {
         "batch_size": 8,
         "num_epoch": 30,
-        "lr": 1e-4,
+        "lr": 1e-5,
         "seq_len": 350, # author had checked, 350 is enough for Italian
         "d_model": 512,
         "lang_src": "en",
