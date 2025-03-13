@@ -8,7 +8,7 @@ class PatchEmbedding(nn.Module):
     Parameters: 
         - image_size: int, the size of the image (it is a square).
         - patch_size: int, the size of the patch (it is a square).
-        - in_channels: int, the number of input channels. grayscale = 1, RAG = 3.
+        - in_channels: int, the number of input channels. grayscale = 1, RGB = 3.
         - embed_dim: int, the dimension of the embedding.
         
     Attritubtes:
@@ -73,7 +73,7 @@ class Attention(nn.Module):
         self.w_v = nn.Linear(dim, dim, bias=qkv_bias)
         
         self.atten_drop = nn.Dropout(attn_p)
-        self.proj = nn.Linear(dim, dim)
+        self.proj = nn.Linear(dim, dim) # Wo in Transformer
         self.proj_drop = nn.Dropout(proj_p)
         
     @staticmethod
@@ -108,9 +108,65 @@ class Attention(nn.Module):
         key = self.w_k(x) # (n_samples, n_patches + 1, dim)
         value = self.w_v(x) # (n_samples, n_patches + 1, dim)
         
-        # reshape to (n_samples, n_heads, n_patches + 1, head_dim)
+        # Reshape to (n_samples, n_heads, n_patches + 1, head_dim), n_tokens = n_pathes + 1 (1 stands for cls token)
         query = query.view(n_samples, n_tokens, self.heads, self.head_dim).transpose(1, 2) # n_tokens = n_patches + 1
         key = key.view(n_samples, n_tokens, self.heads, self.head_dim).transpose(1, 2) # n_tokens = n_patches + 1
         value = value.view(n_samples, n_tokens, self.heads, self.head_dim).transpose(1, 2) # n_tokens = n_patches + 1
         
         x, attn_score = Attention.attention_score(query, key, value, self.scale, self.atten_drop)
+
+        # Reshape to (n_samples, n_patches + 1, dim)
+        x = x.transpose(1, 2).contiguous().view(x.shape[0], -1, self.heads * self.head_dim)
+
+        x = self.proj(x)
+        x = self.proj_drop(x)
+
+        return x
+
+class MLP(nn.Module): # FeedForwardBlock
+    """
+    Multilyaer perceptron.
+
+    Parameters:
+        - in_features: int, number of input features
+        - hidden_features: int, number of nodes in the hidden layer
+        - out_features: int, number of output features
+        - dropout: float, dropout probability
+    Attributes:
+        - fc: nn.Linear, the first linear layer
+        - act: nn.GeLU, GeLU activation
+        - fc2: nn.Linear, the second linear layer
+        - dropout: n.Dropout
+    """
+    def __init__(self, in_features: int, hidden_features: int, out_features: int, dropout: float):
+        super().__init__()
+        self.fc = nn.Linear(in_features, hidden_features)
+        self.act = nn.GELU()
+        self.fc2 = nn.Linear(hidden_features, out_features)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        """
+        Run forward pass.
+
+        Parameters:
+            - x: torch.Tensor, (n_samples, n_patches+1, in_features)
+        
+        Returns:
+            - torch.Tensor, (n_samples, n_patches+1, out_features)
+        """
+        x = self.fc(x)
+        x = self.act(x)
+        x = self.fc2(x)
+        x = self.dropout(x)
+
+        return x
+    
+
+class Block: # in ViT we only have encoder block
+    """
+    Transformer block.
+
+    Parameters:
+        - dim: int, embedding dimension
+    """

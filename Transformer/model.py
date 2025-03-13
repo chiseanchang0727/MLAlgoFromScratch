@@ -130,7 +130,7 @@ class MultiHeadAttetionBlock(nn.Module):
         self.w_k = nn.Linear(d_model, d_model) # Wk
         self.w_v = nn.Linear(d_model, d_model) # Wv
         
-        self.w_o = nn.Linear(d_model, d_model)
+        self.w_o = nn.Linear(d_model, d_model) # Wo
         self.dropout = nn.Dropout(dropout)
 
     @staticmethod
@@ -157,9 +157,9 @@ class MultiHeadAttetionBlock(nn.Module):
         """
         mask: controlling information flow during training and inference, preventing attention to padding tokens and future imformation leakage
         """
-        query = self.w_q(q) # (Batch, seq_len, d_moel) -> (Batch, seq_len, d_moel) 
-        key = self.w_k(k) # (Batch, seq_len, d_moel) -> (Batch, seq_len, d_moel) 
-        value = self.w_v(v) # (Batch, seq_len, d_moel) -> (Batch, seq_len, d_moel) 
+        query = self.w_q(q) # (Batch, seq_len, d_model) -> (Batch, seq_len, d_model) 
+        key = self.w_k(k) # (Batch, seq_len, d_model) -> (Batch, seq_len, d_model) 
+        value = self.w_v(v) # (Batch, seq_len, d_model) -> (Batch, seq_len, d_model) 
 
         # (Batch, seq_len, d_model) -> (Batch, seq_len, h, d_k) -> (Batch, h, seq_len, d_k)
         # Which means, each head will watch the full sentence but a smaller part of embedding
