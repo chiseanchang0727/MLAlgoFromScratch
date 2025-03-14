@@ -169,4 +169,23 @@ class Block: # in ViT we only have encoder block
 
     Parameters:
         - dim: int, embedding dimension
+        - n_heads: int, number of attention heads
+        - mlp_ratio: float, determine the hidden dimension size of the MLP module with respect to `dim`
+        - qkv_bias: bool, if True then we include bias, otherwise not include
+        - dropout: float, dropout probability
+    
+    Attributes:
+        - norm1, norm2: layer normalization
+        - attn: attetion module
+        - mlp: MLP module
     """
+    def __init__(self, dim: int, n_heads: int, mlp_ratio: float, qkv_bias: bool, dropout: float):
+        super().__init__()
+        self.dim = dim
+        self.n_heads = n_heads
+        self.mlp_ratio = mlp_ratio
+        self.qkv_bias = qkv_bias
+        self.dropout = dropout
+
+        self.norm1 = nn.LayerNorm(dim, eps=1e-6)
+        self.norm2 = nn.LayerNorm(dim, eps=1e-6)

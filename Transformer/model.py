@@ -93,7 +93,10 @@ class LayerNormalization(nn.Module):
         mean = x.mean(dim=-1, keepdim=True) 
         std = x.std(dim=-1, keepdim=True)
         
-        return self.alpha * (x-mean) / (std + self.eps) + self.beta
+        """
+        # the calculation is same as nn.LayerNorm(...,elementwise_affine=True), which means including learnable parameters, alpha and beta
+        """
+        return self.alpha * (x-mean) / (std + self.eps) + self.beta 
     
 
 class FeedForwardBlock(nn.Module):
@@ -106,6 +109,7 @@ class FeedForwardBlock(nn.Module):
 
     def forward(self, x):
         # (Batch, seq_len, d_model) -> (Batch, seq_len, d_ff) -> (Batch, seq_len, d_model)
+        #TODO: change to gelu after evluation to see if performance become better
         return self.linear_2(self.dropout(torch.relu(self.linear_1(x))))
     
 class MultiHeadAttetionBlock(nn.Module):
