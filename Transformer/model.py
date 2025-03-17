@@ -110,11 +110,12 @@ class FeedForwardBlock(nn.Module):
     def forward(self, x):
         # (Batch, seq_len, d_model) -> (Batch, seq_len, d_ff) -> (Batch, seq_len, d_model)
         #TODO: change to gelu after evluation to see if performance become better
+        # self.linear_2(self.dropout(torch.nn.GELU(self.linear_1(x))))
         return self.linear_2(self.dropout(torch.relu(self.linear_1(x))))
     
 class MultiHeadAttetionBlock(nn.Module):
     
-    def __init__(self, d_model: int, h: int, dropout: int) -> None:
+    def __init__(self, d_model: int, h: int, dropout: int, qkv_bias=False) -> None:
         """
         d_model: the size of embedding vector
         h: the number of head
@@ -130,11 +131,11 @@ class MultiHeadAttetionBlock(nn.Module):
         assert d_model % h == 0, "d_model is not dividable by h"
         self.d_k = d_model // h
         
-        self.w_q = nn.Linear(d_model, d_model) # Wq
-        self.w_k = nn.Linear(d_model, d_model) # Wk
-        self.w_v = nn.Linear(d_model, d_model) # Wv
+        self.w_q = nn.Linear(d_model, d_model, bias=qkv_bias) # Wq
+        self.w_k = nn.Linear(d_model, d_model, bias=qkv_bias) # Wk
+        self.w_v = nn.Linear(d_model, d_model, bias=qkv_bias) # Wv
         
-        self.w_o = nn.Linear(d_model, d_model) # Wo
+        self.w_o = nn.Linear(d_model, d_model, bias=qkv_bias) # Wo, the output projection
         self.dropout = nn.Dropout(dropout)
 
     @staticmethod
@@ -176,6 +177,8 @@ class MultiHeadAttetionBlock(nn.Module):
         # (Batch, h, seq_len, d_k) -> (Batch, seq_len, h, d_k) -> (Batch, seq_len, d_model)
         # -1: PyTorch calculates this dimension automatically to ensure the total number of elements remains consistent. i.e. let pytorch figure out this dimension
         x = x.transpose(1, 2).contiguous().view(x.shape[0], -1, self.h * self.d_k)
+
+        # TODO: Batch normalizatoin is probably needed when the input is multiple sentences at once.
 
         # (Batch, seq_len, d_model) -> (Batch, seq_len, d_model)
         return self.w_o(x)
@@ -228,7 +231,6 @@ class EncoderBlock(nn.Module):
         self.self_attention_block = self_attention_block # It only focus on the input sentence itslef, so called self-attention
         self.feed_forward_block = feed_forward_block
         self.residual_connection = nn.ModuleList([ResidualConnection(features, dropout) for _ in range(2)]) # two residual connection in the encoder
-        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, src_mask):
         x = self.residual_connection[0](x, lambda x : self.self_attention_block(x, x, x, src_mask))
@@ -371,3 +373,9 @@ def build_transformer(src_vocab_size: int, tgt_vocab_size: int, src_seq_len: int
             nn.init.xavier_uniform(p)
 
     return transformer
+
+
+
+
+# Accelerating PyTorch Transformers by replacing nn.Transformer with Nested Tensors and torch.compile()
+#　https://pytorch.org/tutorials/intermediate/transformer_building_blocks.html

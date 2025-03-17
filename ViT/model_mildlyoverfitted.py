@@ -1,20 +1,26 @@
 import torch
 import torch.nn as nn
 
+# Ref: https://www.youtube.com/watch?v=ovB0ddFtzzA&t=857s
+
+# TODO: position encoding should be added
+
 
 class PatchEmbedding(nn.Module):
     """
-    Split the image into patches and then embed them.
-    Parameters: 
-        - image_size: int, the size of the image (it is a square).
-        - patch_size: int, the size of the patch (it is a square).
-        - in_channels: int, the number of input channels. grayscale = 1, RGB = 3.
-        - embed_dim: int, the dimension of the embedding.
-        
-    Attritubtes:
-        - n_patches: int, the number of patches inside the image.
-        - proj: nn.Conv2d, the convolutional layer that does both the splitting and the embedding.
+    Splits an image into patches and embeds them.
+
+    Parameters:
+        image_size (int): size of the input image (assumed to be square).
+        patch_size (int): size of each patch (assumed to be square).
+        in_channels (int): number of input channels (1 for grayscale, 3 for RGB).
+        embed_dim (int): dimension of the embedding.
+
+    Attributes:
+        n_patches (int): number of patches in the image.
+        proj (nn.Conv2d): convolutional layer that performs both patch splitting and embedding.
     """
+
     def __init__(self, image_size, patch_size, in_channels, embed_dim):
         super().__init__()
         self.img_size = image_size
@@ -33,7 +39,7 @@ class PatchEmbedding(nn.Module):
         Run forward pass.
         
         Parameters:
-            - x: torch.Tensor, (n_samples, in_channels, img_size(height/width), img_size(height/width))
+            x: torch.Tensor, (n_samples, in_channels, img_size(height/width), img_size(height/width))
         Returns:
         torch.Tensor, (n_samples, n_patches, embed_dim)
         """
@@ -47,21 +53,23 @@ class PatchEmbedding(nn.Module):
     
 class Attention(nn.Module):
     """
-    Attention mechanism.
-    
-    Porameters:
-        - dim: int, the input and output dimension of per token feature.
-        - n_heads: int, number of attention heads
-        - qkv_bias: bool, if True then we include bias to the query, key and value projections
-        - attn_p: float, dropout probability applied to the query, key and value tensors
-        - proj_p: float, dropout probability applied to the output tensor
-        
+    Attention Mechanism.
+
+    Parameters:
+        dim (int): input and output dimension per token feature.
+        n_heads (int): number of attention heads.
+        qkv_bias (bool): if True, includes bias in the query, key, and value projections.
+        attn_p (float): dropout probability applied to the query, key, and value tensors.
+        proj_p (float): dropout probability applied to the output tensor.
+
     Attributes:
-        - scale: float, normalization factor for the dot product
-        - qkv: nn.Linear, the linear transformation for the query, key and value
-        - proj: nn.Linear, the linear mapping takes in the concatenated output of all attention heads and maps it into a new space
-        - attn_drop, proj_drop: nn.Dropout, the dropout layers
+        scale (float): normalization factor for the dot product.
+        qkv (nn.Linear): linear transformation for the query, key, and value.
+        proj (nn.Linear): maps the concatenated output of all attention heads into a new space.
+        attn_drop (nn.Dropout): dropout layer applied to the attention scores.
+        proj_drop (nn.Dropout): dropout layer applied to the final projection output.
     """
+
     def __init__(self, dim, n_heads=12, qkv_bias=True, attn_p=0., proj_p=0.):
         super().__init__()
         self.heads = n_heads
@@ -94,7 +102,7 @@ class Attention(nn.Module):
         Run forward pass.
         
         Parameters:
-            - x: torch.Tensor, (n_samples, n_pathces + 1, dim), +1 means there will be an extra learnable token for the class token.
+            x: torch.Tensor, (n_samples, n_pathces + 1, dim), +1 means there will be an extra learnable token for the class token.
         
         Returns:
             torch.Tensor, (n_samples, n_patches + 1, dim)
@@ -118,6 +126,11 @@ class Attention(nn.Module):
         # Reshape to (n_samples, n_patches + 1, dim)
         x = x.transpose(1, 2).contiguous().view(x.shape[0], -1, self.heads * self.head_dim)
 
+        """
+        Note: 
+            1. there is one more dropout compared with transformer
+            2. proj is the projection layer for output, a.k.a Wo
+        """
         x = self.proj(x)
         x = self.proj_drop(x)
 
@@ -125,19 +138,21 @@ class Attention(nn.Module):
 
 class MLP(nn.Module): # FeedForwardBlock
     """
-    Multilyaer perceptron.
+    Multilayer Perceptron (MLP).
 
     Parameters:
-        - in_features: int, number of input features
-        - hidden_features: int, number of nodes in the hidden layer
-        - out_features: int, number of output features
-        - dropout: float, dropout probability
+        in_features (int): number of input features.
+        hidden_features (int): number of nodes in the hidden layer.
+        out_features (int): number of output features.
+        dropout (float): dropout probability.
+
     Attributes:
-        - fc: nn.Linear, the first linear layer
-        - act: nn.GeLU, GeLU activation
-        - fc2: nn.Linear, the second linear layer
-        - dropout: n.Dropout
+        fc (nn.Linear): first linear layer.
+        act (nn.GELU): GELU activation function.
+        fc2 (nn.Linear): second linear layer.
+        dropout (nn.Dropout): dropout layer.
     """
+
     def __init__(self, in_features: int, hidden_features: int, out_features: int, dropout: float):
         super().__init__()
         self.fc = nn.Linear(in_features, hidden_features)
@@ -150,10 +165,10 @@ class MLP(nn.Module): # FeedForwardBlock
         Run forward pass.
 
         Parameters:
-            - x: torch.Tensor, (n_samples, n_patches+1, in_features)
+            x: torch.Tensor, (n_samples, n_patches+1, in_features)
         
         Returns:
-            - torch.Tensor, (n_samples, n_patches+1, out_features)
+            torch.Tensor, (n_samples, n_patches+1, out_features)
         """
         x = self.fc(x)
         x = self.act(x)
@@ -162,30 +177,74 @@ class MLP(nn.Module): # FeedForwardBlock
 
         return x
     
-
+"""
+The purpose of Vit is classification, so it doesn't need decoder.(no need for generation, like text)
+"""
 class Block: # in ViT we only have encoder block
     """
     Transformer block.
 
     Parameters:
-        - dim: int, embedding dimension
-        - n_heads: int, number of attention heads
-        - mlp_ratio: float, determine the hidden dimension size of the MLP module with respect to `dim`
-        - qkv_bias: bool, if True then we include bias, otherwise not include
-        - dropout: float, dropout probability
+        dim (int): embedding dimension
+        n_heads (int): number of attention heads
+        mlp_ratio (float): determine the hidden dimension size of the MLP module with respect to `dim`
+        qkv_bias (bool): if True then we include bias, otherwise not include
+        dropout (float): dropout probability
     
     Attributes:
-        - norm1, norm2: layer normalization
-        - attn: attetion module
-        - mlp: MLP module
+        norm1, norm2: layer normalization
+        attn: attetion module
+        mlp: MLP module
     """
-    def __init__(self, dim: int, n_heads: int, mlp_ratio: float, qkv_bias: bool, dropout: float):
+    def __init__(self, dim: int, n_heads: int, mlp_ratio: float=4.0, qkv_bias: bool=True, attn_dropout: float=0., proj_drop: float=0.):
         super().__init__()
-        self.dim = dim
-        self.n_heads = n_heads
-        self.mlp_ratio = mlp_ratio
-        self.qkv_bias = qkv_bias
-        self.dropout = dropout
 
         self.norm1 = nn.LayerNorm(dim, eps=1e-6)
         self.norm2 = nn.LayerNorm(dim, eps=1e-6)
+
+        self.attn_block = Attention(
+            dim=dim,
+            n_heads=n_heads,
+            qkv_bias=qkv_bias,
+            attn_p=attn_dropout,
+            proj_p=proj_drop
+        )
+
+        hidden_features = int(dim * mlp_ratio)
+        self.mlp = MLP(
+            in_features=dim,
+            hidden_features=hidden_features,
+            out_features=dim
+        )
+    
+    def forward(self, x):
+        """
+        Run forward pass.
+
+        Parameters:
+        x: torch.Tensor, (n_samples, n_patches+1, dim)
+        
+        Returns:
+        torch.Tensor, (n_samples, n_patches+1, dim)
+        """
+
+        x = x + self.attn_block(self.norm1(x)) # Residual connection
+        x = x + self.mlp(self.norm2(x))
+
+        return x
+    
+
+class ViT(nn.Module):
+    """
+    Simplified implementation of the Vision Transformer.
+
+    Parameters:
+        img_size (int): height and width of the input image (assumed to be square).
+        patch_size (int): height and width of each patch (assumed to be square).
+        in_channels (int): number of input channels.
+        n_class (int): number of classes.
+        embed_dim (int): dimensionality of the token/patch embeddings.
+        depth (int): number of blocks.
+        n_heads (int): number of attention heads
+        mlp_ratio (float): determines the hidden dimension of the 'MLP' module.
+    """
