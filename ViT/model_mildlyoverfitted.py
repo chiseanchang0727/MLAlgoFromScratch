@@ -3,9 +3,6 @@ import torch.nn as nn
 
 # Ref: https://www.youtube.com/watch?v=ovB0ddFtzzA&t=857s
 
-# TODO: position encoding should be added
-
-
 class PatchEmbedding(nn.Module):
     """
     Splits an image into patches and embeds them.
@@ -247,4 +244,20 @@ class ViT(nn.Module):
         depth (int): number of blocks.
         n_heads (int): number of attention heads
         mlp_ratio (float): determines the hidden dimension of the 'MLP' module.
+        qkv_bias (bool): if True then we include bias to the query, key and value projections.
+        droupout, attn_droupout (float): dropout probability.
+        
+    Attributtes:
+        patch_embedding: PatchEmbedding layer
+        cls_token: nn.Parameter
+            Learnable parameter that will represent the first token in the sequence.
+        pos_embedding: nn.Parameter
+            Positional embedding of the cls token + all the patches.
+            It has (n_patches + 1) * embed_dim elements. 
+                256*256 image, 16*16 patch size, 64 embed_dim, then pos_embedding has (256//16 + 1) * 64 = 1088 elements.
+        pos_drop: nn.Dropout
+        blocks: nn.ModuleList
+        norm: nn.LayerNorm
     """
+
+    
