@@ -18,11 +18,11 @@ class PatchEmbedding(nn.Module):
         proj (nn.Conv2d): convolutional layer that performs both patch splitting and embedding.
     """
 
-    def __init__(self, image_size, patch_size, in_channels, embed_dim):
+    def __init__(self, img_size, patch_size, in_channels, embed_dim):
         super().__init__()
-        self.img_size = image_size
+        self.img_size = img_size
         self.patch_size = patch_size
-        self.n_patches = (image_size // patch_size) ** 2
+        self.n_patches = (img_size // patch_size) ** 2
         
         self.proj = nn.Conv2d(
             in_channels,
@@ -245,7 +245,7 @@ class ViT(nn.Module):
         n_heads (int): number of attention heads
         mlp_ratio (float): determines the hidden dimension of the 'MLP' module.
         qkv_bias (bool): if True then we include bias to the query, key and value projections.
-        droupout, attn_droupout (float): dropout probability.
+        dropout, attn_dropout (float): dropout probability.
         
     Attributtes:
         patch_embedding: PatchEmbedding layer
@@ -259,5 +259,81 @@ class ViT(nn.Module):
         blocks: nn.ModuleList
         norm: nn.LayerNorm
     """
+    def __init__(
+            self,
+            img_size=384,
+            patch_size=16,
+            input_channels=3,
+            n_classes=1000,
+            embed_dim=768,
+            depth=12,
+            n_heads=12,
+            mlp_ratio=4,
+            qkv_bias=True,
+            dropout=0.1,
+            attn_dropout=0.1
+    ):
+        super().__init__()
 
-    
+        self.patch_embed = PatchEmbedding(
+            img_size=img_size,
+            patch_size=patch_size,
+            in_channels=input_channels,
+            embed_dim=embed_dim
+        )
+
+        self.cls_token=nn.Parameter(torch.zeros(1, 1, embed_dim)) # torch.randn()
+        self.pos_embedding=nn.Parameter(torch.zeros(1, 1 + self.patch_embed.n_patches, embed_dim))
+
+        self.post_drop = nn.Dropout(dropout=dropout)
+
+        # Each block are the same but each of them have its own learnable parameters
+        self.blocks = nn.ModuleList(
+            [
+                Block(
+                    dim=embed_dim, # the input includes cls_token, we will see it laterly
+                    n_heads=n_heads, 
+                    mlp_ratio=mlp_ratio, 
+                    qkv_bias=qkv_bias, 
+                    attn_dropout=attn_dropout, 
+                    proj_drop=dropout
+                )
+                for _ in range(depth)
+            ]
+        )
+
+        self.norm = nn.LayerNorm(embed_dim, eps=1e-6)
+        self.output_proj = nn.Linear(embed_dim, n_classes)
+
+    def forward(self, x):
+        """
+        Run the forward pass.
+
+        Parameters:
+            x (torch.Tensor): (n_samples, input_channels, img_size, img_size)
+
+        Returns:
+            logits (torch.Tensor): Logtis over all classes, (n_samples, n_classes) 
+        """
+        n_samples = x.shape[0]
+        x = self.patch_embed(x)
+        
+        cls_token = self.cls_token.expand(n_samples, -1, -1) # (n_samples, 1, embed_dim)
+
+        # Pretend the cls_token to each patch
+        x = torch.concat((cls_token, x), dim=1) # (n_samples, 1 + n_patches, embed_dim)
+
+        x = x + self.pos_embedding # (n_samples, 1 + n_patches, embed_dim)
+
+        x = self.post_drop(x)
+
+        for block in self.blocks:
+            x = block(x)
+
+        x = self.norm(x)
+
+        cls_token_final = x[:, 0] # extract the cls_token, which is in the first index of each patch
+
+        x = self.output_proj(cls_token_final)
+
+        return x
