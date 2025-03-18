@@ -2,11 +2,10 @@ import numpy as np
 import timm
 import torch
 from trial_mildlyoverfitted import ViT
+import os
 
-import ssl
-import certifi
+os.environ['HF_ENDPOINT']= 'https://hf-mirror.com'
 
-ssl._create_default_https_context = ssl._create_unverified_context
 
 # Helpers
 def get_n_params(module):
@@ -37,4 +36,4 @@ config = {
 }
 
 model_vit = ViT(**config)
-model_vit.eva()
+model_vit.eval()

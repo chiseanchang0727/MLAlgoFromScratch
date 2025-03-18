@@ -3,6 +3,13 @@ from sentence_transformers import SentenceTransformer
 # Choose a model from Hugging Face
 model_name = "sentence-transformers/all-MiniLM-L6-v2"
 
+import ssl
+print(ssl.get_default_verify_paths())
+
+import requests
+requests.get("https://cdn-lfs.hf.co/sentence-transformers/all-MiniLM-L6-v2/", verify=False)
+
+
 # Load and download the model
 model = SentenceTransformer(model_name)
 
