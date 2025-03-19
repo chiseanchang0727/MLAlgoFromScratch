@@ -65,3 +65,6 @@ res_c = model_custom(input)
 
 assert get_n_params(model_custom) == get_n_params(model_official)
 assert_tensor_equal(res_c, res_o)
+
+
+torch.save(model_custom, "./Vit/try1/model.pth")
