@@ -10,7 +10,7 @@ class PatchEmbedding(nn.Module):
     Parameters:
         image_size (int): size of the input image (assumed to be square).
         patch_size (int): size of each patch (assumed to be square).
-        in_channels (int): number of input channels (1 for grayscale, 3 for RGB).
+        input_channels (int): number of input channels (1 for grayscale, 3 for RGB).
         embed_dim (int): dimension of the embedding.
 
     Attributes:
@@ -18,14 +18,14 @@ class PatchEmbedding(nn.Module):
         proj (nn.Conv2d): convolutional layer that performs both patch splitting and embedding.
     """
 
-    def __init__(self, img_size, patch_size, in_channels, embed_dim):
+    def __init__(self, img_size, patch_size, input_channels, embed_dim):
         super().__init__()
         self.img_size = img_size
         self.patch_size = patch_size
         self.n_patches = (img_size // patch_size) ** 2
         
         self.proj = nn.Conv2d(
-            in_channels,
+            input_channels,
             embed_dim,
             kernel_size=patch_size,
             stride=patch_size # no overlap
@@ -36,7 +36,7 @@ class PatchEmbedding(nn.Module):
         Run forward pass.
         
         Parameters:
-            x: torch.Tensor, (n_samples, in_channels, img_size(height/width), img_size(height/width))
+            x: torch.Tensor, (n_samples, input_channels, img_size(height/width), img_size(height/width))
         Returns:
         torch.Tensor, (n_samples, n_patches, embed_dim)
         """
@@ -69,14 +69,17 @@ class Attention(nn.Module):
 
     def __init__(self, dim, n_heads=12, qkv_bias=True, attn_p=0., proj_p=0.):
         super().__init__()
-        self.heads = n_heads
+        self.dim = dim
+        self.n_heads = n_heads
         self.head_dim = dim // n_heads
-        self.scale = self.head_dim ** 0.5 # Don't feed too large values into softmax, scale them down by the head_dim, actuall it's the sqrt(d_k) in "attention is all you need"
+        self.scale = self.head_dim ** -0.5 # Don't feed too large values into softmax, scale them down by the head_dim, actuall it's the sqrt(d_k) in "attention is all you need"
         
-        self.w_q = nn.Linear(dim, dim, bias=qkv_bias)
-        self.w_k = nn.Linear(dim, dim, bias=qkv_bias)
-        self.w_v = nn.Linear(dim, dim, bias=qkv_bias)
-        
+        # self.w_q = nn.Linear(dim, dim, bias=qkv_bias)
+        # self.w_k = nn.Linear(dim, dim, bias=qkv_bias)
+        # self.w_v = nn.Linear(dim, dim, bias=qkv_bias)
+
+        self.qkv = nn.Linear(dim, dim*3, bias=qkv_bias)
+
         self.atten_drop = nn.Dropout(attn_p)
         self.proj = nn.Linear(dim, dim) # Wo in Transformer
         self.proj_drop = nn.Dropout(proj_p)
@@ -84,14 +87,14 @@ class Attention(nn.Module):
     @staticmethod
     def attention_score(q, k, v, scale, dropout):
         
-        score = (q @ k.transpose(-2, -1)) / scale
+        score = (q @ k.transpose(-2, -1)) * scale
         
         attn_score = torch.softmax(score, dim=-1)
         
         if dropout is not None:
             attn_score = dropout(attn_score)
 
-        return (attn_score @ v), attn_score
+        return (attn_score @ v)
         
         
     def forward(self, x):
@@ -109,19 +112,28 @@ class Attention(nn.Module):
         if dim != self.dim:
             raise ValueError(f'Input dim {dim} should be {self.dim}')
         
-        query = self.w_q(x) # (n_samples, n_patches + 1, dim)
-        key = self.w_k(x) # (n_samples, n_patches + 1, dim)
-        value = self.w_v(x) # (n_samples, n_patches + 1, dim)
-        
+        # query = self.w_q(x) # (n_samples, n_patches + 1, dim)
+        # key = self.w_k(x) # (n_samples, n_patches + 1, dim)
+        # value = self.w_v(x) # (n_samples, n_patches + 1, dim)
+
+        qkv = self.qkv(x)  # (n_samples, n_patches + 1, 3 * dim)
+        qkv = qkv.reshape(
+                n_samples, n_tokens, 3, self.n_heads, self.head_dim
+        )  # (n_smaples, n_patches + 1, 3, n_heads, head_dim)
+        qkv = qkv.permute(
+                2, 0, 3, 1, 4
+        )
+        q, k, v = qkv[0], qkv[1], qkv[2]
+
         # Reshape to (n_samples, n_heads, n_patches + 1, head_dim), n_tokens = n_pathes + 1 (1 stands for cls token)
-        query = query.view(n_samples, n_tokens, self.heads, self.head_dim).transpose(1, 2) # n_tokens = n_patches + 1
-        key = key.view(n_samples, n_tokens, self.heads, self.head_dim).transpose(1, 2) # n_tokens = n_patches + 1
-        value = value.view(n_samples, n_tokens, self.heads, self.head_dim).transpose(1, 2) # n_tokens = n_patches + 1
+        # query = query.view(n_samples, n_tokens, self.heads, self.head_dim).transpose(1, 2) # n_tokens = n_patches + 1
+        # key = key.view(n_samples, n_tokens, self.heads, self.head_dim).transpose(1, 2) # n_tokens = n_patches + 1
+        # value = value.view(n_samples, n_tokens, self.heads, self.head_dim).transpose(1, 2) # n_tokens = n_patches + 1
         
-        x, attn_score = Attention.attention_score(query, key, value, self.scale, self.atten_drop)
+        x = Attention.attention_score(q, k, v, self.scale, self.atten_drop)
 
         # Reshape to (n_samples, n_patches + 1, dim)
-        x = x.transpose(1, 2).contiguous().view(x.shape[0], -1, self.heads * self.head_dim)
+        x = x.transpose(1, 2).contiguous().view(x.shape[0], -1, self.n_heads * self.head_dim)
 
         """
         Note: 
@@ -177,7 +189,7 @@ class MLP(nn.Module): # FeedForwardBlock
 """
 The purpose of Vit is classification, so it doesn't need decoder.(no need for generation, like text)
 """
-class Block: # in ViT we only have encoder block
+class Block(nn.Module): # in ViT we only have encoder block
     """
     Transformer block.
 
@@ -193,11 +205,11 @@ class Block: # in ViT we only have encoder block
         attn: attetion module
         mlp: MLP module
     """
-    def __init__(self, dim: int, n_heads: int, mlp_ratio: float=4.0, qkv_bias: bool=True, attn_dropout: float=0., proj_drop: float=0.):
+    def __init__(self, dim: int, n_heads: int, mlp_ratio: float, qkv_bias: bool=True, attn_dropout: float=0., proj_drop: float=0.):
         super().__init__()
 
         self.norm1 = nn.LayerNorm(dim, eps=1e-6)
-        self.norm2 = nn.LayerNorm(dim, eps=1e-6)
+
 
         self.attn_block = Attention(
             dim=dim,
@@ -207,11 +219,14 @@ class Block: # in ViT we only have encoder block
             proj_p=proj_drop
         )
 
+        self.norm2 = nn.LayerNorm(dim, eps=1e-6)
+
         hidden_features = int(dim * mlp_ratio)
         self.mlp = MLP(
             in_features=dim,
             hidden_features=hidden_features,
-            out_features=dim
+            out_features=dim,
+            dropout=proj_drop
         )
     
     def forward(self, x):
@@ -238,7 +253,7 @@ class ViT(nn.Module):
     Parameters:
         img_size (int): height and width of the input image (assumed to be square).
         patch_size (int): height and width of each patch (assumed to be square).
-        in_channels (int): number of input channels.
+        input_channels (int): number of input channels.
         n_class (int): number of classes.
         embed_dim (int): dimensionality of the token/patch embeddings.
         depth (int): number of blocks.
@@ -255,7 +270,7 @@ class ViT(nn.Module):
             Positional embedding of the cls token + all the patches.
             It has (n_patches + 1) * embed_dim elements. 
                 256*256 image, 16*16 patch size, 64 embed_dim, then pos_embedding has (256//16 + 1) * 64 = 1088 elements.
-        pos_drop: nn.Dropout
+        position_drop: nn.Dropout
         blocks: nn.ModuleList
         norm: nn.LayerNorm
     """
@@ -270,22 +285,22 @@ class ViT(nn.Module):
             n_heads=12,
             mlp_ratio=4,
             qkv_bias=True,
-            dropout=0.1,
-            attn_dropout=0.1
+            dropout=0.,
+            attn_dropout=0.
     ):
         super().__init__()
 
         self.patch_embed = PatchEmbedding(
             img_size=img_size,
             patch_size=patch_size,
-            in_channels=input_channels,
+            input_channels=input_channels,
             embed_dim=embed_dim
         )
 
         self.cls_token=nn.Parameter(torch.zeros(1, 1, embed_dim)) # torch.randn()
         self.pos_embedding=nn.Parameter(torch.zeros(1, 1 + self.patch_embed.n_patches, embed_dim))
 
-        self.post_drop = nn.Dropout(dropout=dropout)
+        self.position_drop = nn.Dropout(dropout)
 
         # Each block are the same but each of them have its own learnable parameters
         self.blocks = nn.ModuleList(
@@ -325,7 +340,7 @@ class ViT(nn.Module):
 
         x = x + self.pos_embedding # (n_samples, 1 + n_patches, embed_dim)
 
-        x = self.post_drop(x)
+        x = self.position_drop(x)
 
         for block in self.blocks:
             x = block(x)
