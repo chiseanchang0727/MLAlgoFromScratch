@@ -10,6 +10,7 @@ __pycache__/
 
 runs/
 weights/
+data/
 
 # Distribution / packaging
 .Python
