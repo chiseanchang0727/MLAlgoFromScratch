@@ -11,6 +11,10 @@ __pycache__/
 runs/
 weights/
 data/
+unsloth_*/
+unsloth_*/
+outputs/
+
 
 # Distribution / packaging
 .Python
